@@ -101,6 +101,6 @@ async def health():
     return {"status": "ok"}
 
 
-   frontend_dir = os.path.dirname(__file__)
-   if os.path.isdir(frontend_dir):
-       app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+frontend_dir = os.path.dirname(__file__)
+if os.path.isdir(frontend_dir):
+    app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
