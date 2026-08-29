@@ -103,6 +103,6 @@ async def health():
 
 
 # Serve the frontend (index.html + assets) at the root
-frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
+   frontend_dir = os.path.join(os.path.dirname(__file__), "frontend")
 if os.path.isdir(frontend_dir):
     app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
