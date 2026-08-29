@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WeatherGPT — Conversational Weather Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg: #0B1626;
+    --bg-deep: #070E1A;
+    --panel: #101D33;
+    --panel-2: #16253F;
+    --line: #223655;
+    --text: #EAF0F5;
+    --muted: #8FA3B8;
+    --accent: #2DD4BF;
+    --accent-dim: #164E49;
+    --warn: #F5A623;
+    --severe: #F2545B;
+    --radius: 14px;
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--font-body);
+    display:flex; flex-direction:column;
+  }
+  ::selection{ background:var(--accent-dim); color:var(--accent); }
+  ::-webkit-scrollbar{ width:8px; }
+  ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:8px; }
+
+  /* ---- Header / signature radar sweep ---- */
+  header{
+    position:relative; overflow:hidden;
+    padding:22px 28px; border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, var(--bg-deep), var(--bg));
+    display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+  }
+  .radar-sig{
+    position:absolute; top:50%; left:36px; width:64px; height:64px; transform:translateY(-50%);
+    border-radius:50%; border:1px solid var(--line);
+    background: conic-gradient(from 0deg, transparent 0deg, transparent 300deg, rgba(45,212,191,0.55) 340deg, var(--accent) 360deg);
+    animation: sweep 4s linear infinite;
+    z-index:0;
+  }
+  .radar-sig::after{
+    content:''; position:absolute; inset:14px; border-radius:50%; background:var(--bg-deep);
+    border:1px solid var(--line);
+  }
+  @keyframes sweep{ to{ transform:translateY(-50%) rotate(360deg); } }
+  .brand{ display:flex; align-items:center; gap:16px; position:relative; z-index:1; margin-left:64px; }
+  .brand h1{
+    font-family:var(--font-display); font-size:22px; margin:0; letter-spacing:-0.02em;
+  }
+  .brand h1 span{ color:var(--accent); }
+  .brand p{ margin:2px 0 0; color:var(--muted); font-size:13px; }
+  .status-pill{
+    display:flex; align-items:center; gap:8px; font-family:var(--font-mono); font-size:12px;
+    color:var(--muted); background:var(--panel); border:1px solid var(--line);
+    padding:7px 12px; border-radius:999px;
+  }
+  .status-dot{ width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent); }
+
+  /* ---- Layout ---- */
+  main{
+    flex:1; display:grid; grid-template-columns: 1fr 340px; gap:0;
+    min-height:0;
+  }
+  @media (max-width: 900px){ main{ grid-template-columns: 1fr; } }
+
+  /* ---- Chat column ---- */
+  .chat-col{ display:flex; flex-direction:column; min-height:0; border-right:1px solid var(--line); }
+  .toolbar{
+    display:flex; gap:10px; padding:14px 20px; border-bottom:1px solid var(--line);
+    flex-wrap:wrap; align-items:center; background:var(--bg-deep);
+  }
+  .sector-select{
+    display:flex; gap:6px; flex-wrap:wrap;
+  }
+  .sector-btn{
+    font-family:var(--font-body); font-size:12.5px; padding:6px 12px; border-radius:999px;
+    border:1px solid var(--line); background:transparent; color:var(--muted); cursor:pointer;
+    transition:all .15s;
+  }
+  .sector-btn:hover{ border-color:var(--accent); color:var(--text); }
+  .sector-btn.active{ background:var(--accent-dim); border-color:var(--accent); color:var(--accent); }
+  .lang-hint{ margin-left:auto; font-size:12px; color:var(--muted); font-family:var(--font-mono); }
+
+  .messages{ flex:1; overflow-y:auto; padding:24px; display:flex; flex-direction:column; gap:16px; }
+  .msg{ max-width:78%; padding:12px 16px; border-radius:var(--radius); line-height:1.5; font-size:14.5px; white-space:pre-wrap; }
+  .msg.user{ align-self:flex-end; background:var(--accent-dim); border:1px solid var(--accent); color:var(--text); border-bottom-right-radius:4px; }
+  .msg.bot{ align-self:flex-start; background:var(--panel); border:1px solid var(--line); border-bottom-left-radius:4px; }
+  .msg.system{ align-self:center; color:var(--muted); font-size:12.5px; font-family:var(--font-mono); background:none; border:none; }
+  .msg.bot.typing span{ display:inline-block; width:6px; height:6px; margin-right:4px; border-radius:50%; background:var(--muted); animation:blink 1.2s infinite ease-in-out; }
+  .msg.bot.typing span:nth-child(2){ animation-delay:.2s; } .msg.bot.typing span:nth-child(3){ animation-delay:.4s; }
+  @keyframes blink{ 0%,80%,100%{ opacity:.25; } 40%{ opacity:1; } }
+
+  .composer{ display:flex; gap:10px; padding:16px 20px; border-top:1px solid var(--line); background:var(--bg-deep); }
+  .composer input{
+    flex:1; background:var(--panel); border:1px solid var(--line); color:var(--text);
+    padding:12px 14px; border-radius:10px; font-family:var(--font-body); font-size:14.5px; outline:none;
+  }
+  .composer input:focus{ border-color:var(--accent); }
+  .icon-btn, .send-btn{
+    border:1px solid var(--line); background:var(--panel); color:var(--text);
+    border-radius:10px; padding:0 16px; cursor:pointer; font-size:14px; font-family:var(--font-body);
+    display:flex; align-items:center; justify-content:center; gap:6px;
+  }
+  .icon-btn.mic-on{ border-color:var(--severe); color:var(--severe); }
+  .send-btn{ background:var(--accent); color:var(--bg-deep); font-weight:600; border-color:var(--accent); }
+  .send-btn:hover{ filter:brightness(1.08); }
+
+  /* ---- Sidebar ---- */
+  .sidebar{ display:flex; flex-direction:column; background:var(--bg-deep); overflow-y:auto; }
+  .side-section{ padding:18px 20px; border-bottom:1px solid var(--line); }
+  .side-section h3{
+    font-family:var(--font-display); font-size:13px; text-transform:uppercase; letter-spacing:.08em;
+    color:var(--muted); margin:0 0 12px;
+  }
+  .loc-row{ display:flex; gap:8px; }
+  .loc-row input{
+    flex:1; background:var(--panel); border:1px solid var(--line); color:var(--text);
+    padding:9px 11px; border-radius:8px; font-family:var(--font-body); font-size:13.5px; outline:none;
+  }
+  .loc-row input:focus{ border-color:var(--accent); }
+  .loc-row button{
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text); border-radius:8px;
+    padding:0 12px; cursor:pointer; font-size:13px;
+  }
+  .alert-feed{ display:flex; flex-direction:column; gap:8px; max-height:220px; overflow-y:auto; }
+  .alert-card{
+    border-radius:10px; padding:10px 12px; font-size:12.5px; border-left:3px solid var(--muted);
+    background:var(--panel);
+  }
+  .alert-card.mild{ border-color:var(--accent); }
+  .alert-card.moderate{ border-color:var(--warn); }
+  .alert-card.severe{ border-color:var(--severe); }
+  .alert-card .meta{ color:var(--muted); font-family:var(--font-mono); font-size:11px; margin-top:3px; }
+  .empty-note{ color:var(--muted); font-size:12.5px; font-style:italic; }
+  canvas{ max-height:180px; }
+  .conn-note{ font-size:11px; color:var(--muted); margin-top:8px; font-family:var(--font-mono); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="radar-sig" aria-hidden="true"></div>
+  <div class="brand">
+    <div>
+      <h1>Weather<span>GPT</span></h1>
+      <p>Conversational weather intelligence · forecasts · alerts · climate</p>
+    </div>
+  </div>
+  <div class="status-pill"><span class="status-dot"></span> live NWP data · Open-Meteo</div>
+</header>
+
+<main>
+  <section class="chat-col">
+    <div class="toolbar">
+      <div class="sector-select" id="sectorSelect">
+        <button class="sector-btn active" data-sector="general">General</button>
+        <button class="sector-btn" data-sector="farmer">Farmer</button>
+        <button class="sector-btn" data-sector="aviation">Aviation</button>
+        <button class="sector-btn" data-sector="marine">Marine</button>
+        <button class="sector-btn" data-sector="urban">Urban planning</button>
+      </div>
+      <div class="lang-hint">ask in Tamil, Hindi, or English — WeatherGPT replies in kind</div>
+    </div>
+
+    <div class="messages" id="messages">
+      <div class="msg system">WeatherGPT is ready. Try: "Will it rain in Trichy tomorrow?" or "எனக்கு நாளைக்கு தமிழ்நாட்டில் மழை பெய்யுமா?"</div>
+    </div>
+
+    <div class="composer">
+      <button class="icon-btn" id="micBtn" title="Voice input">🎙️</button>
+      <input id="chatInput" type="text" placeholder="Ask about weather, forecasts, or climate trends…" />
+      <button class="send-btn" id="sendBtn">Send</button>
+    </div>
+  </section>
+
+  <aside class="sidebar">
+    <div class="side-section">
+      <h3>Location watch</h3>
+      <div class="loc-row">
+        <input id="locInput" type="text" placeholder="e.g. Kumbakonam" value="Kumbakonam" />
+        <button id="watchBtn">Watch</button>
+      </div>
+      <div class="conn-note" id="wsStatus">not connected</div>
+    </div>
+
+    <div class="side-section">
+      <h3>Live alerts</h3>
+      <div class="alert-feed" id="alertFeed">
+        <div class="empty-note">No alerts yet — watch a location above.</div>
+      </div>
+    </div>
+
+    <div class="side-section">
+      <h3>5-day outlook</h3>
+      <canvas id="forecastChart"></canvas>
+    </div>
+  </aside>
+</main>
+
+<script>
+const API_BASE = window.location.origin; // backend serves this file too
+
+let currentSector = "general";
+document.getElementById('sectorSelect').addEventListener('click', (e) => {
+  if(!e.target.classList.contains('sector-btn')) return;
+  document.querySelectorAll('.sector-btn').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  currentSector = e.target.dataset.sector;
+});
+
+const messagesEl = document.getElementById('messages');
+function addMsg(text, cls){
+  const div = document.createElement('div');
+  div.className = 'msg ' + cls;
+  div.textContent = text;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return div;
+}
+function addTyping(){
+  const div = document.createElement('div');
+  div.className = 'msg bot typing';
+  div.innerHTML = '<span></span><span></span><span></span>';
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return div;
+}
+
+async function sendMessage(){
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if(!text) return;
+  addMsg(text, 'user');
+  input.value = '';
+  const typing = addTyping();
+  try{
+    const res = await fetch(`${API_BASE}/api/chat`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({message:text, sector: currentSector})
+    });
+    const data = await res.json();
+    typing.remove();
+    if(!res.ok){ addMsg('Error: ' + (data.detail || 'request failed'), 'bot'); return; }
+    addMsg(data.reply, 'bot');
+    speak(data.reply);
+    // if the reply pulled a forecast, refresh the chart from the raw data
+    const fc = (data.raw_data || []).find(d => d.tool === 'get_forecast');
+    if(fc) renderChart(fc.data);
+  }catch(err){
+    typing.remove();
+    addMsg('Network error — is the backend running?', 'bot');
+  }
+}
+document.getElementById('sendBtn').addEventListener('click', sendMessage);
+document.getElementById('chatInput').addEventListener('keydown', e => { if(e.key === 'Enter') sendMessage(); });
+
+// ---- Voice input (Web Speech API) ----
+let recognition, listening = false;
+const micBtn = document.getElementById('micBtn');
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+if(SpeechRecognition){
+  recognition = new SpeechRecognition();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.lang = 'en-IN'; // browser will still often handle code-switched Tamil/Hindi reasonably
+  recognition.onresult = (e) => {
+    document.getElementById('chatInput').value = e.results[0][0].transcript;
+    sendMessage();
+  };
+  recognition.onend = () => { listening = false; micBtn.classList.remove('mic-on'); };
+} else {
+  micBtn.title = "Voice input not supported in this browser";
+}
+micBtn.addEventListener('click', () => {
+  if(!recognition) return;
+  if(listening){ recognition.stop(); return; }
+  listening = true; micBtn.classList.add('mic-on');
+  recognition.start();
+});
+function speak(text){
+  if(!('speechSynthesis' in window)) return;
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.rate = 1.0;
+  window.speechSynthesis.speak(utter);
+}
+
+// ---- Live alerts via WebSocket ----
+let ws;
+const alertFeed = document.getElementById('alertFeed');
+const wsStatus = document.getElementById('wsStatus');
+function watchLocation(){
+  const loc = document.getElementById('locInput').value.trim();
+  if(!loc) return;
+  if(ws) ws.close();
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${window.location.host}/ws/alerts/${encodeURIComponent(loc)}`);
+  ws.onopen = () => { wsStatus.textContent = `watching ${loc} — live`; };
+  ws.onclose = () => { wsStatus.textContent = 'disconnected'; };
+  ws.onerror = () => { wsStatus.textContent = 'connection error'; };
+  ws.onmessage = (evt) => {
+    const payload = JSON.parse(evt.data);
+    if(payload.type !== 'alert') return;
+    if(alertFeed.querySelector('.empty-note')) alertFeed.innerHTML = '';
+    payload.alerts.forEach(a => {
+      const card = document.createElement('div');
+      card.className = 'alert-card ' + a.severity;
+      card.innerHTML = `<div>${a.message}</div><div class="meta">${payload.location} · ${a.date} · ${a.severity}</div>`;
+      alertFeed.prepend(card);
+    });
+  };
+  // also fetch current alerts immediately
+  fetch(`${API_BASE}/api/alerts?location=${encodeURIComponent(loc)}`).then(r => r.json()).then(data => {
+    if(!data.alerts || !data.alerts.length) return;
+    if(alertFeed.querySelector('.empty-note')) alertFeed.innerHTML = '';
+    data.alerts.forEach(a => {
+      const card = document.createElement('div');
+      card.className = 'alert-card ' + a.severity;
+      card.innerHTML = `<div>${a.message}</div><div class="meta">${data.location} · ${a.date} · ${a.severity}</div>`;
+      alertFeed.appendChild(card);
+    });
+  }).catch(()=>{});
+  // and load the forecast chart for this location
+  fetch(`${API_BASE}/api/forecast?location=${encodeURIComponent(loc)}&days=5`).then(r => r.json()).then(renderChart).catch(()=>{});
+}
+document.getElementById('watchBtn').addEventListener('click', watchLocation);
+
+// ---- Forecast chart ----
+let chart;
+function renderChart(data){
+  if(!data || !data.days) return;
+  const ctx = document.getElementById('forecastChart');
+  const labels = data.days.map(d => d.date.slice(5));
+  const max = data.days.map(d => d.max_c);
+  const min = data.days.map(d => d.min_c);
+  if(chart) chart.destroy();
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label:'Max °C', data:max, borderColor:'#F5A623', tension:.35, pointRadius:3 },
+        { label:'Min °C', data:min, borderColor:'#2DD4BF', tension:.35, pointRadius:3 }
+      ]
+    },
+    options: {
+      responsive:true,
+      plugins:{ legend:{ labels:{ color:'#8FA3B8', font:{size:11} } } },
+      scales:{
+        x:{ ticks:{ color:'#8FA3B8', font:{size:10} }, grid:{ color:'#223655' } },
+        y:{ ticks:{ color:'#8FA3B8', font:{size:10} }, grid:{ color:'#223655' } }
+      }
+    }
+  });
+}
+
+// initial load
+watchLocation();
+</script>
+</body>
+</html>
