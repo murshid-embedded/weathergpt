@@ -40,7 +40,7 @@ app = FastAPI(title="WeatherGPT", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten in production
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -48,7 +48,7 @@ app.add_middleware(
 
 class ChatRequest(BaseModel):
     message: str
-    sector: str = "general"  # general | farmer | aviation | marine | urban
+    sector: str = "general"
 
 
 @app.post("/api/chat")
@@ -87,12 +87,11 @@ async def alerts(location: str = Query(...)):
 
 @app.websocket("/ws/alerts/{location}")
 async def ws_alerts(websocket: WebSocket, location: str):
-    """Client connects here to receive live push alerts for a location."""
     await websocket.accept()
     await alerts_engine.subscribe(location, websocket)
     try:
         while True:
-            await websocket.receive_text()  # keep-alive / ignore client pings
+            await websocket.receive_text()
     except WebSocketDisconnect:
         alerts_engine.unsubscribe(websocket)
 
@@ -102,7 +101,6 @@ async def health():
     return {"status": "ok"}
 
 
-# Serve the frontend (index.html + assets) at the root
 frontend_dir = os.path.join(os.path.dirname(__file__), "frontend")
 if os.path.isdir(frontend_dir):
-app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+    app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
